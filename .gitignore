@@ -1,0 +1,9 @@
+# Local tooling and editor folders
+.codex/
+.vscode/
+
+# Internal docs not meant for the repository
+md/
+
+# Keep the main repository documentation
+!README.md

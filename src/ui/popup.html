@@ -1,0 +1,65 @@
+<!-- Popup UI for Media Scout Downloader: lists detected media for the active tab and triggers downloads. -->
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Media Scout Downloader</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <div class="popup">
+      <header class="header">
+        <div>
+          <p class="eyebrow">Media Scout</p>
+          <h1>Captura de medios</h1>
+        </div>
+        <div class="header-actions">
+          <button id="clear" class="ghost danger" type="button">Limpiar pestaña</button>
+          <button id="refresh" class="ghost" type="button">Actualizar</button>
+        </div>
+      </header>
+
+      <p id="status" class="status">Detectando medios en esta pestaña...</p>
+
+      <section class="toolbar" aria-label="Filtros de medios detectados">
+        <input
+          id="search"
+          class="search"
+          type="search"
+          placeholder="Filtrar por nombre, host o URL"
+          autocomplete="off"
+        />
+        <div class="toolbar-row">
+          <label class="field">
+            <span>Tipo</span>
+            <select id="type-filter">
+              <option value="all">Todos</option>
+              <option value="video">Videos</option>
+              <option value="audio">Audios</option>
+              <option value="playlist">Playlists</option>
+            </select>
+          </label>
+          <label class="field">
+            <span>Orden</span>
+            <select id="sort-filter">
+              <option value="recent">Más recientes</option>
+              <option value="size">Mayor tamaño</option>
+              <option value="host">Host A-Z</option>
+            </select>
+          </label>
+        </div>
+      </section>
+
+      <p id="summary" class="summary" hidden></p>
+
+      <div id="media-list" class="media-list" aria-live="polite"></div>
+
+      <p class="legal">
+        Solo se listan recursos accesibles sin DRM ni cifrado. Respeta los términos de cada sitio.
+      </p>
+    </div>
+
+    <script src="popup.js" defer></script>
+  </body>
+</html>
