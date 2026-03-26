@@ -1,4 +1,11 @@
-// background.js service worker: keeps the media catalog, enriches entries and triggers downloads.
+// background.js service worker: keeps the media catalog, enriches entries, applies settings and triggers downloads.
+
+import {
+  DEFAULT_SETTINGS,
+  SETTINGS_KEY,
+  isBlockedHost,
+  normalizeSettings,
+} from "../shared/settings.js";
 
 const mediaCatalog = new Map(); // tabId -> array of media entries
 const mediaIndex = new Map(); // tabId -> Map(indexKey, entry)
@@ -8,10 +15,9 @@ const VIDEO_EXTENSIONS = [".mp4", ".webm", ".mkv", ".mov", ".m4v", ".ogv"];
 const AUDIO_EXTENSIONS = [".mp3", ".wav", ".ogg", ".oga", ".flac", ".aac", ".m4a", ".opus", ".weba"];
 const PLAYLIST_EXTENSIONS = [".m3u8", ".mpd"];
 const BADGE_COLOR = "#10b981";
-const MIN_AUDIO_BYTES = 50 * 1024; // filtra sonidos de interfaz diminutos
-const MAX_ENTRIES_PER_TAB = 250;
 const STORAGE_KEY = "mediaScout.catalog.v1";
-const storageArea = chrome.storage?.session ?? chrome.storage?.local ?? null;
+const catalogStorageArea = chrome.storage?.session ?? chrome.storage?.local ?? null;
+const settingsStorageArea = chrome.storage?.local ?? chrome.storage?.sync ?? null;
 const UI_SOUND_PATTERNS = [
   "/s/search/audio/",
   "no_input.mp3",
@@ -21,7 +27,9 @@ const UI_SOUND_PATTERNS = [
   "click.mp3",
 ];
 
-let storageReadyPromise = null;
+let currentSettings = { ...DEFAULT_SETTINGS };
+let catalogReadyPromise = null;
+let settingsReadyPromise = null;
 let persistTimer = null;
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
@@ -29,6 +37,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     .then(sendResponse)
     .catch((error) => sendResponse({ ok: false, error: error?.message ?? String(error) }));
   return true;
+});
+
+chrome.storage.onChanged.addListener((changes) => {
+  if (changes[SETTINGS_KEY]?.newValue) {
+    currentSettings = normalizeSettings(changes[SETTINGS_KEY].newValue);
+    applySettingsToCatalogs();
+  }
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
@@ -50,7 +65,7 @@ chrome.webRequest.onHeadersReceived.addListener(
 );
 
 async function handleRuntimeMessage(message, sender) {
-  await ensureCatalogLoaded();
+  await Promise.all([ensureCatalogLoaded(), ensureSettingsLoaded()]);
 
   if (message?.type === "mediaFound" && sender.tab?.id !== undefined) {
     return {
@@ -81,7 +96,7 @@ async function handleRuntimeMessage(message, sender) {
 }
 
 async function handleHeadersReceived(details) {
-  await ensureCatalogLoaded();
+  await Promise.all([ensureCatalogLoaded(), ensureSettingsLoaded()]);
 
   const { tabId, url, responseHeaders } = details;
   if (!url || tabId === undefined || tabId < 0 || !responseHeaders) {
@@ -124,21 +139,35 @@ async function handleHeadersReceived(details) {
 }
 
 async function ensureCatalogLoaded() {
-  if (!storageArea) {
+  if (!catalogStorageArea) {
     return;
   }
 
-  if (!storageReadyPromise) {
-    storageReadyPromise = hydrateCatalogFromStorage().catch((error) => {
+  if (!catalogReadyPromise) {
+    catalogReadyPromise = hydrateCatalogFromStorage().catch((error) => {
       console.warn("No se pudo restaurar el catalogo persistido", error);
     });
   }
 
-  await storageReadyPromise;
+  await catalogReadyPromise;
+}
+
+async function ensureSettingsLoaded() {
+  if (!settingsStorageArea) {
+    return;
+  }
+
+  if (!settingsReadyPromise) {
+    settingsReadyPromise = hydrateSettingsFromStorage().catch((error) => {
+      console.warn("No se pudo restaurar la configuracion", error);
+    });
+  }
+
+  await settingsReadyPromise;
 }
 
 async function hydrateCatalogFromStorage() {
-  const stored = await storageGet(STORAGE_KEY);
+  const stored = await catalogStorageGet(STORAGE_KEY);
   const snapshot = stored?.[STORAGE_KEY];
   if (!snapshot?.tabs || typeof snapshot.tabs !== "object") {
     return;
@@ -153,7 +182,7 @@ async function hydrateCatalogFromStorage() {
     const entries = rawEntries
       .map(sanitizeStoredEntry)
       .filter(Boolean)
-      .slice(0, MAX_ENTRIES_PER_TAB);
+      .slice(0, currentSettings.maxEntriesPerTab);
 
     if (!entries.length) {
       continue;
@@ -165,13 +194,19 @@ async function hydrateCatalogFromStorage() {
   }
 }
 
+async function hydrateSettingsFromStorage() {
+  const stored = await settingsStorageGet(SETTINGS_KEY);
+  currentSettings = normalizeSettings(stored?.[SETTINGS_KEY]);
+  applySettingsToCatalogs();
+}
+
 function sanitizeStoredEntry(entry) {
   if (!entry || typeof entry !== "object") {
     return null;
   }
 
   const normalizedUrl = normalizeMediaUrl(entry.url);
-  if (!normalizedUrl) {
+  if (!normalizedUrl || isBlockedHost(normalizedUrl, currentSettings)) {
     return null;
   }
 
@@ -187,6 +222,13 @@ function sanitizeStoredEntry(entry) {
     ),
     mimeType: typeof entry.mimeType === "string" ? entry.mimeType : null,
     pageTitle: typeof entry.pageTitle === "string" ? entry.pageTitle : "",
+    pageUrl: typeof entry.pageUrl === "string" ? entry.pageUrl : null,
+    platform: typeof entry.platform === "string" ? entry.platform : null,
+    groupId: typeof entry.groupId === "string" ? entry.groupId : null,
+    container: typeof entry.container === "string" ? entry.container : null,
+    qualityLabel: typeof entry.qualityLabel === "string" ? entry.qualityLabel : null,
+    streamRole: typeof entry.streamRole === "string" ? entry.streamRole : null,
+    itag: Number.isFinite(entry.itag) ? entry.itag : null,
     addedAt: Number.isFinite(entry.addedAt) ? entry.addedAt : Date.now(),
     thumbnail: typeof entry.thumbnail === "string" ? entry.thumbnail : null,
     duration: Number.isFinite(entry.duration) ? entry.duration : null,
@@ -204,7 +246,9 @@ function buildIndexMap(entries) {
 
 function registerMediaEntry(tabId, payload, tab) {
   const normalizedUrl = normalizeMediaUrl(payload.url);
-  if (!normalizedUrl) {
+  const source = normalizeSource(payload.source);
+
+  if (!normalizedUrl || isBlockedBySettings(normalizedUrl, source)) {
     return { added: false, updated: false };
   }
 
@@ -213,10 +257,11 @@ function registerMediaEntry(tabId, payload, tab) {
   const normalizedType = normalizeType(payload.mediaType);
   const key = getIndexKey(normalizedUrl, normalizedType);
   const pageTitle = tab?.title ?? payload.pageTitle ?? "";
+  const pageUrl = tab?.url ?? payload.pageUrl ?? null;
   const existingEntry = index.get(key);
 
   if (existingEntry) {
-    const updated = mergeMediaEntry(existingEntry, payload, pageTitle);
+    const updated = mergeMediaEntry(existingEntry, payload, pageTitle, pageUrl);
     if (updated) {
       schedulePersistCatalog();
     }
@@ -228,12 +273,19 @@ function registerMediaEntry(tabId, payload, tab) {
     url: normalizedUrl,
     type: normalizedType,
     isPlaylist: payload.isPlaylist ?? false,
-    source: normalizeSource(payload.source),
+    source,
     suggestedFileName: sanitizeDownloadFilename(
       payload.fileName ?? buildSuggestedFileName(normalizedUrl, pageTitle, normalizedType)
     ),
     mimeType: payload.mimeType ?? null,
     pageTitle,
+    pageUrl: normalizePageUrl(pageUrl),
+    platform: typeof payload.platform === "string" ? payload.platform : null,
+    groupId: typeof payload.groupId === "string" ? payload.groupId : null,
+    container: typeof payload.container === "string" ? payload.container : null,
+    qualityLabel: typeof payload.qualityLabel === "string" ? payload.qualityLabel : null,
+    streamRole: typeof payload.streamRole === "string" ? payload.streamRole : null,
+    itag: Number.isFinite(payload.itag) ? payload.itag : null,
     addedAt: Date.now(),
     thumbnail: payload.thumbnail ?? null,
     duration: payload.duration ?? null,
@@ -248,12 +300,13 @@ function registerMediaEntry(tabId, payload, tab) {
   return { added: true, updated: false };
 }
 
-function mergeMediaEntry(entry, payload, pageTitle) {
+function mergeMediaEntry(entry, payload, pageTitle, pageUrl) {
   let changed = false;
   const nextType = normalizeType(payload.mediaType);
   const nextSource = mergeSources(entry.source, payload.source);
   const nextFileName = payload.fileName ? sanitizeDownloadFilename(payload.fileName) : null;
   const nextPageTitle = typeof pageTitle === "string" ? pageTitle.trim() : "";
+  const nextPageUrl = normalizePageUrl(pageUrl ?? payload.pageUrl ?? null);
 
   if (entry.type === "unknown" && nextType !== "unknown") {
     entry.type = nextType;
@@ -295,10 +348,45 @@ function mergeMediaEntry(entry, payload, pageTitle) {
     changed = true;
   }
 
+  if (nextPageUrl && nextPageUrl !== entry.pageUrl) {
+    entry.pageUrl = nextPageUrl;
+    changed = true;
+  }
+
+  if (typeof payload.platform === "string" && payload.platform !== entry.platform) {
+    entry.platform = payload.platform;
+    changed = true;
+  }
+
+  if (typeof payload.groupId === "string" && payload.groupId !== entry.groupId) {
+    entry.groupId = payload.groupId;
+    changed = true;
+  }
+
+  if (typeof payload.container === "string" && payload.container !== entry.container) {
+    entry.container = payload.container;
+    changed = true;
+  }
+
+  if (typeof payload.qualityLabel === "string" && payload.qualityLabel !== entry.qualityLabel) {
+    entry.qualityLabel = payload.qualityLabel;
+    changed = true;
+  }
+
+  if (typeof payload.streamRole === "string" && payload.streamRole !== entry.streamRole) {
+    entry.streamRole = payload.streamRole;
+    changed = true;
+  }
+
+  if (Number.isFinite(payload.itag) && payload.itag !== entry.itag) {
+    entry.itag = payload.itag;
+    changed = true;
+  }
+
   if (nextFileName && nextFileName !== entry.suggestedFileName) {
     entry.suggestedFileName = nextFileName;
     changed = true;
-  } else if (shouldRefreshSuggestedFileName(entry.suggestedFileName, entry.type, entry.pageTitle)) {
+  } else if (shouldRefreshSuggestedFileName(entry.suggestedFileName, entry.pageTitle)) {
     const rebuiltFileName = buildSuggestedFileName(entry.url, entry.pageTitle, entry.type);
     if (rebuiltFileName !== entry.suggestedFileName) {
       entry.suggestedFileName = rebuiltFileName;
@@ -309,7 +397,7 @@ function mergeMediaEntry(entry, payload, pageTitle) {
   return changed;
 }
 
-function shouldRefreshSuggestedFileName(fileName, mediaType, pageTitle) {
+function shouldRefreshSuggestedFileName(fileName, pageTitle) {
   if (!fileName || !pageTitle) {
     return false;
   }
@@ -320,18 +408,30 @@ function shouldRefreshSuggestedFileName(fileName, mediaType, pageTitle) {
     lowerName.startsWith("video-") ||
     lowerName.startsWith("audio-") ||
     lowerName.startsWith("playlist-") ||
-    lowerName.startsWith("unknown-") ||
-    lowerName === deriveFilename(pageTitle, mediaType).toLowerCase()
+    lowerName.startsWith("unknown-")
   );
 }
 
 function trimCatalogForTab(catalog, index) {
-  while (catalog.length > MAX_ENTRIES_PER_TAB) {
+  const maxEntries = currentSettings.maxEntriesPerTab;
+  while (catalog.length > maxEntries) {
     const removedEntry = catalog.pop();
     if (removedEntry) {
       index.delete(getIndexKey(removedEntry.url, removedEntry.type));
     }
   }
+}
+
+function applySettingsToCatalogs() {
+  for (const [tabId, catalog] of mediaCatalog.entries()) {
+    const filteredCatalog = catalog.filter((entry) => !isBlockedHost(entry.url, currentSettings));
+    const index = buildIndexMap(filteredCatalog);
+    trimCatalogForTab(filteredCatalog, index);
+    mediaCatalog.set(tabId, filteredCatalog);
+    mediaIndex.set(tabId, index);
+    updateBadge(tabId, filteredCatalog.length);
+  }
+  schedulePersistCatalog();
 }
 
 function getMediaForTab(tabId) {
@@ -342,7 +442,11 @@ function getMediaForTab(tabId) {
 async function handleDownloadRequest(message) {
   const normalizedUrl = normalizeMediaUrl(message.url);
   if (!normalizedUrl) {
-    throw new Error("URL de descarga no válida.");
+    throw new Error("URL de descarga no valida.");
+  }
+
+  if (isBlockedHost(normalizedUrl, currentSettings)) {
+    throw new Error("Ese host esta bloqueado por la configuracion actual.");
   }
 
   const filename = sanitizeDownloadFilename(
@@ -354,7 +458,7 @@ async function handleDownloadRequest(message) {
       {
         url: normalizedUrl,
         filename,
-        saveAs: true,
+        saveAs: currentSettings.preferSaveAs,
       },
       (id) => {
         if (chrome.runtime.lastError) {
@@ -392,7 +496,7 @@ async function clearMediaForTab(tabId) {
 }
 
 function schedulePersistCatalog() {
-  if (!storageArea) {
+  if (!catalogStorageArea) {
     return;
   }
 
@@ -405,7 +509,7 @@ function schedulePersistCatalog() {
 }
 
 async function persistCatalogSnapshot() {
-  if (!storageArea) {
+  if (!catalogStorageArea) {
     return;
   }
 
@@ -414,12 +518,25 @@ async function persistCatalogSnapshot() {
     tabs[String(tabId)] = entries;
   }
 
-  await storageSet({
+  await catalogStorageSet({
     [STORAGE_KEY]: {
       savedAt: Date.now(),
       tabs,
     },
   });
+}
+
+function isBlockedBySettings(url, source) {
+  if (isBlockedHost(url, currentSettings)) {
+    return true;
+  }
+  if (source === "dom" && !currentSettings.enableDomDetection) {
+    return true;
+  }
+  if (source === "network" && !currentSettings.enableNetworkDetection) {
+    return true;
+  }
+  return false;
 }
 
 function createEntryId(tabId) {
@@ -539,6 +656,19 @@ function normalizeMediaUrl(url) {
   }
 }
 
+function normalizePageUrl(url) {
+  try {
+    const parsed = new URL(String(url).trim());
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return null;
+    }
+    parsed.hash = "";
+    return parsed.toString();
+  } catch (error) {
+    return null;
+  }
+}
+
 function extractMimeType(headers = []) {
   const header = headers.find((item) => item.name?.toLowerCase() === "content-type");
   if (!header?.value) {
@@ -592,7 +722,7 @@ function isUINotificationSound(url = "") {
 }
 
 function shouldCatalog(details, mediaInfo, contentLength) {
-  if (!mediaInfo) {
+  if (!mediaInfo || !currentSettings.enableNetworkDetection || isBlockedHost(details.url || "", currentSettings)) {
     return false;
   }
 
@@ -602,7 +732,7 @@ function shouldCatalog(details, mediaInfo, contentLength) {
     : parseInt(getHeader(details.responseHeaders, "content-length") || "0", 10);
 
   if (mediaInfo.type === "audio") {
-    if (len > 0 && len < MIN_AUDIO_BYTES) {
+    if (len > 0 && len < currentSettings.minAudioBytes) {
       return false;
     }
     if (isUINotificationSound(url)) {
@@ -706,9 +836,9 @@ function updateBadge(tabId, count) {
   }
 }
 
-function storageGet(key) {
+function catalogStorageGet(key) {
   return new Promise((resolve, reject) => {
-    storageArea.get(key, (result) => {
+    catalogStorageArea.get(key, (result) => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
@@ -718,14 +848,26 @@ function storageGet(key) {
   });
 }
 
-function storageSet(value) {
+function catalogStorageSet(value) {
   return new Promise((resolve, reject) => {
-    storageArea.set(value, () => {
+    catalogStorageArea.set(value, () => {
       if (chrome.runtime.lastError) {
         reject(new Error(chrome.runtime.lastError.message));
         return;
       }
       resolve();
+    });
+  });
+}
+
+function settingsStorageGet(key) {
+  return new Promise((resolve, reject) => {
+    settingsStorageArea.get(key, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result);
     });
   });
 }

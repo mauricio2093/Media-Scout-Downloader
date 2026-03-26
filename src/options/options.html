@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Media Scout Downloader - Ajustes</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main class="settings-page">
+      <section class="hero">
+        <p class="eyebrow">Media Scout Downloader</p>
+        <h1>Ajustes</h1>
+        <p class="intro">
+          Controla qué detecta la extensión, cuánto ruido filtra y cómo se comporta al descargar medios.
+        </p>
+      </section>
+
+      <form id="settings-form" class="settings-card">
+        <section class="settings-group">
+          <h2>Detección</h2>
+          <label class="toggle">
+            <input id="enable-dom-detection" type="checkbox" />
+            <span>Activar detección por DOM</span>
+          </label>
+          <label class="toggle">
+            <input id="enable-network-detection" type="checkbox" />
+            <span>Activar detección por red</span>
+          </label>
+        </section>
+
+        <section class="settings-group grid">
+          <label class="field">
+            <span>Tamaño mínimo de audio en KB</span>
+            <input id="min-audio-kb" type="number" min="0" step="1" />
+            <small>Audios más pequeños se ignoran para reducir sonidos de interfaz.</small>
+          </label>
+          <label class="field">
+            <span>Máximo de entradas por pestaña</span>
+            <input id="max-entries-per-tab" type="number" min="25" max="1000" step="1" />
+            <small>Limita el tamaño del catálogo temporal por pestaña.</small>
+          </label>
+        </section>
+
+        <section class="settings-group">
+          <h2>Descarga</h2>
+          <label class="toggle">
+            <input id="prefer-save-as" type="checkbox" />
+            <span>Mostrar diálogo “Guardar como” al descargar</span>
+          </label>
+        </section>
+
+        <section class="settings-group">
+          <h2>Hosts bloqueados</h2>
+          <label class="field">
+            <span>Un host por línea</span>
+            <textarea id="blocked-hosts" rows="8" placeholder="example.com&#10;cdn.example.net"></textarea>
+            <small>La extensión ignorará detecciones y descargas provenientes de esos hosts y sus subdominios.</small>
+          </label>
+        </section>
+
+        <div class="actions">
+          <button id="reset" class="ghost" type="button">Restablecer</button>
+          <button class="primary" type="submit">Guardar ajustes</button>
+        </div>
+
+        <p id="status" class="status" aria-live="polite"></p>
+      </form>
+    </main>
+
+    <script type="module" src="options.js"></script>
+  </body>
+</html>
