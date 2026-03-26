@@ -761,6 +761,15 @@
     if (hostname.includes("twitch.tv")) {
       return "twitch";
     }
+    if (hostname.includes("kick.com")) {
+      return "kick";
+    }
+    if (hostname.includes("instagram.com")) {
+      return "instagram";
+    }
+    if (hostname === "x.com" || hostname.endsWith(".x.com") || hostname.includes("twitter.com")) {
+      return "x";
+    }
     return hostname || "web";
   }
 

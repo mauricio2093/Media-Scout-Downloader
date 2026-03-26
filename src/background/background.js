@@ -258,6 +258,7 @@ function registerMediaEntry(tabId, payload, tab) {
   const key = getIndexKey(normalizedUrl, normalizedType);
   const pageTitle = tab?.title ?? payload.pageTitle ?? "";
   const pageUrl = tab?.url ?? payload.pageUrl ?? null;
+  const platform = normalizePlatform(payload.platform, pageUrl ?? normalizedUrl);
   const existingEntry = index.get(key);
 
   if (existingEntry) {
@@ -280,7 +281,7 @@ function registerMediaEntry(tabId, payload, tab) {
     mimeType: payload.mimeType ?? null,
     pageTitle,
     pageUrl: normalizePageUrl(pageUrl),
-    platform: typeof payload.platform === "string" ? payload.platform : null,
+    platform,
     groupId: typeof payload.groupId === "string" ? payload.groupId : null,
     container: typeof payload.container === "string" ? payload.container : null,
     qualityLabel: typeof payload.qualityLabel === "string" ? payload.qualityLabel : null,
@@ -307,6 +308,7 @@ function mergeMediaEntry(entry, payload, pageTitle, pageUrl) {
   const nextFileName = payload.fileName ? sanitizeDownloadFilename(payload.fileName) : null;
   const nextPageTitle = typeof pageTitle === "string" ? pageTitle.trim() : "";
   const nextPageUrl = normalizePageUrl(pageUrl ?? payload.pageUrl ?? null);
+  const nextPlatform = normalizePlatform(payload.platform, nextPageUrl ?? entry.pageUrl ?? entry.url);
 
   if (entry.type === "unknown" && nextType !== "unknown") {
     entry.type = nextType;
@@ -353,8 +355,8 @@ function mergeMediaEntry(entry, payload, pageTitle, pageUrl) {
     changed = true;
   }
 
-  if (typeof payload.platform === "string" && payload.platform !== entry.platform) {
-    entry.platform = payload.platform;
+  if (nextPlatform && nextPlatform !== entry.platform) {
+    entry.platform = nextPlatform;
     changed = true;
   }
 
@@ -395,6 +397,40 @@ function mergeMediaEntry(entry, payload, pageTitle, pageUrl) {
   }
 
   return changed;
+}
+
+function normalizePlatform(platform, fallbackUrl) {
+  if (typeof platform === "string" && platform.trim()) {
+    return platform.trim().toLowerCase();
+  }
+
+  return inferPlatformFromUrl(fallbackUrl);
+}
+
+function inferPlatformFromUrl(url) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+
+    if (hostname.includes("youtube.com") || hostname === "youtu.be") {
+      return "youtube";
+    }
+    if (hostname.includes("twitch.tv")) {
+      return "twitch";
+    }
+    if (hostname.includes("kick.com")) {
+      return "kick";
+    }
+    if (hostname.includes("instagram.com")) {
+      return "instagram";
+    }
+    if (hostname === "x.com" || hostname.endsWith(".x.com") || hostname.includes("twitter.com")) {
+      return "x";
+    }
+
+    return hostname || "web";
+  } catch (error) {
+    return "web";
+  }
 }
 
 function shouldRefreshSuggestedFileName(fileName, pageTitle) {

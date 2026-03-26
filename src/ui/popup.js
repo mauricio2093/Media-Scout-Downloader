@@ -56,7 +56,7 @@ async function loadMediaList(manualRefresh = false) {
   state.allMedia = await fetchMediaForTab(activeTab.id);
   renderCurrentState();
   setStatus(state.allMedia.length
-    ? (manualRefresh ? "Detecciones actualizadas." : "Lista lista para usar.")
+    ? (manualRefresh ? "Detecciones actualizadas." : "Lista de medios actualizada.")
     : "No hay medios detectados todavia en esta pestana.");
 }
 
@@ -439,7 +439,7 @@ function buildMediaCard(group) {
   subtitle.className = "group-subtitle";
   subtitle.textContent = buildGroupSubtitle(group);
 
-  top.append(titleStack, buildActionMenu(group));
+  top.append(titleStack);
   titleStack.append(title, subtitle);
 
   const selectorRow = buildSelectorRow(group, entry);
@@ -453,26 +453,27 @@ function buildMediaCard(group) {
   ].filter(Boolean).join(" · ");
   contextLine.title = contextLine.textContent;
 
-  const facts = document.createElement("p");
-  facts.className = "secondary-line";
-  facts.textContent = [
-    hostLabel(entry.url),
-    entry.itag ? `itag ${entry.itag}` : null,
-    inferContainerFromEntry(entry) || null,
-  ].filter(Boolean).join(" · ");
-  facts.title = facts.textContent;
+  const utilityRow = document.createElement("div");
+  utilityRow.className = "utility-row";
+  utilityRow.append(
+    buildActionButton("Copiar url", "quick-copy", {
+      copy: entry.url,
+      copytype: "url",
+    }),
+    buildActionMenu(group),
+  );
 
   const linkStack = document.createElement("div");
   linkStack.className = "link-stack";
   linkStack.append(
-    buildInfoLine("Real", truncateUrl(entry.url), entry.url),
+    buildInfoLine("url", truncateUrl(entry.url), entry.url),
   );
 
   if (shouldShowPageLink(group)) {
     linkStack.append(buildInfoLine("Página", truncateUrl(group.pageUrl), group.pageUrl));
   }
 
-  body.append(top, selectorRow, contextLine, facts, linkStack);
+  body.append(top, selectorRow, contextLine, utilityRow, linkStack);
   card.append(thumb, body);
   return card;
 }
@@ -498,7 +499,6 @@ function buildSelectorRow(group, entry) {
 
   const caret = document.createElement("span");
   caret.className = "selector-caret";
-  caret.textContent = "⌄";
 
   summary.append(label, value, caret);
   menu.append(summary, buildVariantSelectorPanel(group));
@@ -740,13 +740,13 @@ function buildActionMenu(group) {
       filename: entry.suggestedFileName || "",
       mediatype: entry.type || "unknown",
     }),
-    buildActionButton(shouldShowPageLink(group) ? "Copiar real" : "Copiar URL", "menu-item", {
+    buildActionButton(shouldShowPageLink(group) ? "Copiar url" : "Copiar URL", "menu-item", {
       copy: entry.url,
-      copytype: "real",
+      copytype: "url",
     }),
-    buildActionButton(shouldShowPageLink(group) ? "Abrir real" : "Abrir URL", "menu-item", {
+    buildActionButton(shouldShowPageLink(group) ? "Abrir url" : "Abrir URL", "menu-item", {
       open: entry.url,
-      opentype: "real",
+      opentype: "url",
     }),
   );
 
@@ -829,7 +829,7 @@ async function onListClick(event) {
   if (copyButton) {
     closeActionMenu(copyButton);
     const copied = await copyToClipboard(copyButton.dataset.copy);
-    const label = copyButton.dataset.copytype === "real" ? "Enlace real" : "URL";
+    const label = copyButton.dataset.copytype === "url" ? "Enlace url" : "URL";
     setStatus(copied ? `${label} copiado al portapapeles.` : `No se pudo copiar ${label.toLowerCase()}.`);
     return;
   }
@@ -864,7 +864,7 @@ function openMessage(openType) {
     case "video":
       return "Enlace de video abierto en una nueva pestaña.";
     default:
-      return "Enlace real abierto en una nueva pestaña.";
+      return "Enlace url abierto en una nueva pestaña.";
   }
 }
 
@@ -935,14 +935,55 @@ function sourceLabel(source) {
 }
 
 function groupPlatformLabel(group) {
-  const platform = group.activeEntry.platform || group.entries.find((entry) => entry.platform)?.platform || "";
-  if (platform === "youtube") {
-    return "YouTube";
+  const platform = (
+    group.activeEntry.platform
+    || group.entries.find((entry) => entry.platform)?.platform
+    || inferPlatformFromUrl(group.pageUrl || group.activeEntry.pageUrl || group.activeEntry.url)
+    || ""
+  ).toLowerCase();
+
+  switch (platform) {
+    case "youtube":
+      return "YouTube";
+    case "twitch":
+      return "Twitch";
+    case "kick":
+      return "Kick";
+    case "instagram":
+      return "Instagram";
+    case "x":
+    case "twitter":
+      return "X";
+    case "web":
+    case "":
+      return "Web";
+    default:
+      return platform.charAt(0).toUpperCase() + platform.slice(1);
   }
-  if (!platform) {
-    return "Web";
+}
+
+function inferPlatformFromUrl(url) {
+  try {
+    const hostname = new URL(url).hostname.replace(/^www\./, "").toLowerCase();
+    if (hostname.includes("youtube.com") || hostname === "youtu.be") {
+      return "youtube";
+    }
+    if (hostname.includes("twitch.tv")) {
+      return "twitch";
+    }
+    if (hostname.includes("kick.com")) {
+      return "kick";
+    }
+    if (hostname.includes("instagram.com")) {
+      return "instagram";
+    }
+    if (hostname === "x.com" || hostname.endsWith(".x.com") || hostname.includes("twitter.com")) {
+      return "x";
+    }
+    return hostname || "web";
+  } catch (error) {
+    return "web";
   }
-  return platform.charAt(0).toUpperCase() + platform.slice(1);
 }
 
 function cleanPageTitle(title) {

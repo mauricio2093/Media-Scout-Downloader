@@ -140,7 +140,7 @@ h1 {
   margin: 14px 0 0;
   padding: 12px;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 8px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.028), rgba(255, 255, 255, 0.018)),
     linear-gradient(135deg, rgba(90, 166, 199, 0.05), rgba(124, 192, 138, 0.04));
@@ -166,9 +166,9 @@ h1 {
 .search,
 select {
   width: 100%;
-  min-height: 40px;
-  padding: 10px 12px;
-  border-radius: 14px;
+  min-height: 30px;
+  padding: 8px 12px;
+  border-radius: 8px;
   border: 1px solid var(--line);
   background: rgba(255, 255, 255, 0.03);
   color: var(--text);
@@ -212,12 +212,12 @@ select option {
 
 .media-card {
   display: grid;
-  grid-template-columns: 92px minmax(0, 1fr);
+  grid-template-columns: 120px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
-  padding: 14px;
+  padding: 8px;
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 8px;
   background:
     radial-gradient(circle at top right, rgba(90, 166, 199, 0.08), transparent 34%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.02));
@@ -226,9 +226,9 @@ select option {
 
 .thumb {
   position: relative;
-  width: 92px;
-  height: 132px;
-  border-radius: 16px;
+  width: 120px;
+  height: 173px;
+  border-radius: 8px; 
   overflow: hidden;
   background:
     radial-gradient(circle at top left, rgba(90, 166, 199, 0.14), transparent 46%),
@@ -252,13 +252,31 @@ select option {
   left: 7px;
   z-index: 4;
   max-width: calc(100% - 14px);
-  padding: 3px 7px;
-  border-radius: 999px;
+  padding: 3px 8%;
+  border-radius: 5px;
   background: rgba(12, 20, 13, 0.68);
   color: #f3faf2;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.03em;
+}
+
+.thumb .platform-badge {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  z-index: 4;
+  max-width: calc(100% - 14px);
+  padding: 3px 7px;
+  border-radius: 2px;
+  background: rgba(10, 18, 24, 0.7);
+  color: #e7f6fb;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .thumb-video,
@@ -350,9 +368,7 @@ select option {
 }
 
 .selector-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 8px;
+  display: flex;
   align-items: center;
   margin-top: 10px;
 }
@@ -360,6 +376,7 @@ select option {
 .selector-menu {
   position: relative;
   min-width: 0;
+  width: min(214px, 100%);
 }
 
 .selector-field {
@@ -368,9 +385,10 @@ select option {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  padding: 8px 10px;
+  width: 100%;
+  padding: 6px 9px;
   border: 1px solid var(--line);
-  border-radius: 14px;
+  border-radius: 5px;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.018)),
     linear-gradient(135deg, rgba(90, 166, 199, 0.04), rgba(124, 192, 138, 0.035));
@@ -388,7 +406,7 @@ select option {
 
 .selector-label {
   color: var(--muted);
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -397,7 +415,7 @@ select option {
 .selector-value {
   min-width: 0;
   color: var(--text);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -405,13 +423,15 @@ select option {
 }
 
 .selector-caret {
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1;
-}
-
-.selector-chip {
-  margin: 0;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  border-radius: 6px;
+  background-color: rgba(255, 255, 255, 0.03);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 16 16' fill='none'%3E%3Cpath d='M4.5 6.25 8 9.75l3.5-3.5' stroke='%23cfe0d7' stroke-width='1.65' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 16px 16px;
 }
 
 .chip {
@@ -446,15 +466,39 @@ select option {
   text-overflow: ellipsis;
 }
 
+.utility-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 8px;
+}
+
+.quick-copy {
+  min-height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: rgba(44, 206, 111, 0.47);
+  color: var(--soft);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.quick-copy:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: rgba(27, 254, 121, 0.6);
+}
+
 .selector-panel {
   position: absolute;
   top: calc(100% + 8px);
   left: 0;
   z-index: 14;
-  width: min(320px, calc(100vw - 64px));
+  width: min(260px, calc(100vw - 64px));
   padding: 8px;
   border: 1px solid var(--line-strong);
-  border-radius: 14px;
+  border-radius: 5px;
   background:
     linear-gradient(180deg, rgba(23, 31, 25, 0.98), rgba(18, 25, 20, 0.98)),
     linear-gradient(135deg, rgba(90, 166, 199, 0.05), rgba(124, 192, 138, 0.04));
@@ -482,11 +526,11 @@ select option {
 
 .selector-option {
   width: 100%;
-  padding: 7px 9px;
-  border-radius: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
   color: var(--soft);
   text-align: left;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -540,13 +584,17 @@ select option {
 }
 
 .menu-trigger {
+  cursor: pointer;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 999px;
-  color: var(--muted);
+  border-radius: 7px;
+  background: rgba(44, 206, 111, 0.47);
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: white;
   list-style: none;
   font-size: 18px;
   line-height: 1;
@@ -557,10 +605,15 @@ select option {
   display: none;
 }
 
-.action-menu[open] .menu-trigger,
-.menu-trigger:hover {
+.action-menu[open] .menu-trigger {
   background: rgba(255, 255, 255, 0.05);
   color: var(--text);
+}
+
+.menu-trigger:hover {
+  color: var(--text);
+  border-color: var(--line-strong);
+  background: rgba(27, 254, 121, 0.6);
 }
 
 .menu-panel {
@@ -571,7 +624,7 @@ select option {
   min-width: 168px;
   padding: 6px;
   border: 1px solid var(--line-strong);
-  border-radius: 14px;
+  border-radius: 5px;
   background:
     linear-gradient(180deg, rgba(23, 31, 25, 0.97), rgba(18, 25, 20, 0.97)),
     linear-gradient(135deg, rgba(90, 166, 199, 0.05), rgba(124, 192, 138, 0.04));
